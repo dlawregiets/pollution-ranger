@@ -1,0 +1,297 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Courier New', monospace;
+    background-color: #2d4a2b;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    overflow: hidden;
+}
+
+#game-container {
+    position: relative;
+    width: 800px;
+    height: 600px;
+    background-color: #1a1a1a;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+}
+
+#gameCanvas {
+    display: block;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+}
+
+#ui-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+#ui-overlay > * {
+    pointer-events: auto;
+}
+
+#hud {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    display: flex;
+    justify-content: space-between;
+    color: white;
+    font-size: 16px;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+    background-color: rgba(0, 0, 0, 0.6);
+    padding: 10px;
+    border-radius: 5px;
+    pointer-events: none;
+}
+
+#checklist {
+    position: absolute;
+    top: 70px;
+    right: 10px;
+    background-color: rgba(58, 90, 56, 0.95);
+    padding: 12px;
+    border-radius: 8px;
+    border: 2px solid #2d4a2b;
+    color: white;
+    width: 220px;
+    pointer-events: auto;
+}
+
+#checklist h3 {
+    margin: 0 0 8px 0;
+    font-size: 16px;
+    color: #a8d5a8;
+}
+
+.checklist-item {
+    margin: 6px 0;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 3px;
+    transition: background-color 0.2s;
+}
+
+.checklist-item:hover {
+    background-color: rgba(0, 0, 0, 0.2);
+}
+
+.checkbox {
+    margin-right: 6px;
+    font-size: 16px;
+    width: 18px;
+    flex-shrink: 0;
+}
+
+.checklist-item.checked .checkbox {
+    color: #4CAF50;
+}
+
+.checklist-item.checked-no .checkbox {
+    color: #F44336;
+}
+
+#decision-buttons {
+    margin-top: 10px;
+    display: flex;
+    gap: 8px;
+}
+
+.decision-btn {
+    flex: 1;
+    padding: 8px;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+.safe-btn {
+    background-color: #4CAF50;
+    border-color: #388E3C;
+}
+
+.safe-btn:hover {
+    background-color: #66BB6A;
+}
+
+.unsafe-btn {
+    background-color: #F44336;
+    border-color: #D32F2F;
+}
+
+.unsafe-btn:hover {
+    background-color: #EF5350;
+}
+
+#result-message {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.85);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.result-content {
+    background-color: #3a5a38;
+    padding: 30px;
+    border-radius: 10px;
+    border: 4px solid #2d4a2b;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.9);
+    color: white;
+    max-width: 500px;
+    text-align: center;
+}
+
+.result-content h2 {
+    margin-bottom: 15px;
+    font-size: 28px;
+}
+
+.result-content p {
+    margin: 15px 0;
+    font-size: 16px;
+    line-height: 1.6;
+}
+
+#next-campsite {
+    margin-top: 20px;
+    font-size: 18px;
+    padding: 12px 30px;
+}
+
+
+.hidden {
+    display: none !important;
+}
+
+#tutorial,
+#license-viewer,
+#campsite-menu,
+#game-over {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.tutorial-content,
+.license-content,
+.menu-content,
+.game-over-content {
+    background-color: #3a5a38;
+    padding: 30px;
+    border-radius: 10px;
+    border: 4px solid #2d4a2b;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.9);
+    color: white;
+    max-width: 600px;
+    text-align: center;
+}
+
+h2 {
+    margin-bottom: 20px;
+    color: #a8d5a8;
+    font-size: 24px;
+}
+
+#tutorial-text {
+    margin: 20px 0;
+    line-height: 1.6;
+    text-align: left;
+}
+
+button {
+    background-color: #5a8a58;
+    color: white;
+    border: 2px solid #4a7a48;
+    padding: 10px 20px;
+    margin: 5px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    transition: all 0.2s;
+}
+
+button:hover {
+    background-color: #6a9a68;
+    transform: scale(1.05);
+}
+
+button:active {
+    transform: scale(0.95);
+}
+
+#licenseCanvas {
+    border: 2px solid #2d4a2b;
+    margin: 20px 0;
+    background-color: #f5f5dc;
+}
+
+.license-controls p {
+    margin: 15px 0;
+    font-size: 16px;
+}
+
+#menu-options {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+#menu-options button {
+    width: 100%;
+    padding: 15px;
+    font-size: 16px;
+}
+
+#game-over-message {
+    margin: 20px 0;
+    font-size: 18px;
+    line-height: 1.6;
+}
+
+#restart-game {
+    font-size: 18px;
+    padding: 15px 30px;
+    background-color: #7aaa78;
+}
+
+@keyframes water-spray {
+    0% { opacity: 1; }
+    100% { opacity: 0; }
+}
+
+.water-particle {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    background-color: #6bb6ff;
+    border-radius: 50%;
+    pointer-events: none;
+    animation: water-spray 0.5s ease-out;
+}

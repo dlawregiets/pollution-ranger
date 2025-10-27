@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pollution Ranger - Fire Safety Game</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="ui-overlay">
+            <div id="hud">
+                <div id="level-info">Level: <span id="level-number">1</span></div>
+                <div id="water-gun-level">Water Gun Level: <span id="gun-level">1</span></div>
+                <div id="score">Campsites Checked: <span id="score-value">0</span></div>
+                <div id="tutorial-hint" style="font-size: 12px; opacity: 0.7;">Press ? for help</div>
+            </div>
+            <div id="checklist">
+                <h3>Campsite Inspection</h3>
+                <div class="checklist-item" id="check-license">
+                    <span class="checkbox">☐</span> Is there a license?
+                </div>
+                <div class="checklist-item" id="check-license-valid">
+                    <span class="checkbox">☐</span> Is the license valid?
+                </div>
+                <div class="checklist-item" id="check-fire-safe">
+                    <span class="checkbox">☐</span> Is the fire safe?
+                </div>
+                <div id="decision-buttons">
+                    <button id="mark-safe" class="decision-btn safe-btn">Safe</button>
+                    <button id="mark-unsafe" class="decision-btn unsafe-btn">Unsafe</button>
+                </div>
+            </div>
+            <div id="result-message" class="hidden">
+                <div class="result-content">
+                    <h2 id="result-title"></h2>
+                    <p id="result-text"></p>
+                    <button id="next-campsite">Next Campsite</button>
+                </div>
+            </div>
+            <div id="tutorial" class="hidden">
+                <div class="tutorial-content">
+                    <h2>Welcome, Park Ranger!</h2>
+                    <div id="tutorial-text"></div>
+                    <button id="tutorial-next">Next</button>
+                    <button id="tutorial-close" class="hidden">Start Game</button>
+                </div>
+            </div>
+            <div id="license-viewer" class="hidden">
+                <div class="license-content">
+                    <h2>License Inspection</h2>
+                    <canvas id="licenseCanvas" width="400" height="300"></canvas>
+                    <div class="license-controls">
+                        <p>Does this license have a valid campfire logo?</p>
+                        <button id="license-yes">Y - Valid</button>
+                        <button id="license-no">N - Invalid</button>
+                    </div>
+                </div>
+            </div>
+            <div id="campsite-menu" class="hidden">
+                <div class="menu-content">
+                    <h2>Campsite Inspection</h2>
+                    <div id="menu-options">
+                        <button id="inspect-license">Inspect License</button>
+                        <button id="extinguish-fire">Extinguish Fire (Click to shoot)</button>
+                        <button id="cover-fire">Cover with Tarp (X)</button>
+                        <button id="mark-legal">Mark as Legal</button>
+                        <button id="mark-illegal">Mark as Illegal</button>
+                    </div>
+                </div>
+            </div>
+            <div id="game-over" class="hidden">
+                <div class="game-over-content">
+                    <h2 id="game-over-title">Game Over</h2>
+                    <p id="game-over-message"></p>
+                    <button id="restart-game">Restart Game</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="game.js"></script>
+</body>
+</html>
