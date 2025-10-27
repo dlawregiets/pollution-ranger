@@ -16,7 +16,8 @@ const CONFIG = {
     fire: {
         minSafeDistance: 80,
         maxSize: 40,
-        health: 100
+        health: 100,
+        safeDistanceMultiplier: 2 // Distance = fireSize * this multiplier
     },
     waterGun: {
         baseDamage: 10,
@@ -291,24 +292,55 @@ function generateCampsite() {
         fireExtinguished: false
     };
     
-    // Generate trees (keep them on the ground)
-    const numTrees = 8 + Math.floor(Math.random() * 6);
-    for (let i = 0; i < numTrees; i++) {
-        campsite.trees.push({
-            x: 50 + Math.random() * 700,
-            y: CONFIG.canvas.height - CONFIG.tree.height - 20, // Position on ground
-            width: CONFIG.tree.width,
-            height: CONFIG.tree.height
-        });
-    }
-    
-    // Generate tent first so we can check distance to it
+    // Generate tent first
+    let tentX, tentY, tentValid;
+    let tentAttempts = 0;
+    do {
+        tentValid = true;
+        tentX = 100 + Math.random() * 200;
+        tentY = CONFIG.canvas.height - 150 - Math.random() * 50;
+        tentAttempts++;
+    } while (!tentValid && tentAttempts < 10);
     campsite.tent = {
-        x: 100 + Math.random() * 200,
-        y: CONFIG.canvas.height - 150 - Math.random() * 50,
+        x: tentX,
+        y: tentY,
         width: 60,
         height: 50
     };
+
+    // Generate trees (keep them in bottom half, scattered, and not overlapping tent)
+    const numTrees = 8 + Math.floor(Math.random() * 6);
+    for (let i = 0; i < numTrees; i++) {
+        let treeX, treeY, validPosition;
+        let attempts = 0;
+        do {
+            validPosition = true;
+            treeX = 50 + Math.random() * 700;
+            treeY = CONFIG.canvas.height * 0.5 + Math.random() * (CONFIG.canvas.height * 0.5 - CONFIG.tree.height);
+            // Check if tree overlaps with existing trees
+            for (let tree of campsite.trees) {
+                const dist = Math.sqrt(Math.pow(treeX - tree.x, 2) + Math.pow(treeY - tree.y, 2));
+                if (dist < CONFIG.tree.width + 40) {
+                    validPosition = false;
+                    break;
+                }
+            }
+            // Check if tree overlaps with tent
+            const tentDist = Math.sqrt(Math.pow(treeX - campsite.tent.x, 2) + Math.pow(treeY - campsite.tent.y, 2));
+            if (tentDist < 200) {
+                validPosition = false;
+            }
+            attempts++;
+        } while (!validPosition && attempts < 10);
+        if (validPosition || attempts >= 10) {
+            campsite.trees.push({
+                x: treeX,
+                y: treeY,
+                width: CONFIG.tree.width,
+                height: CONFIG.tree.height
+            });
+        }
+    }
     
     // Generate fire position
     let fireX, fireY, fireSafe;
@@ -318,10 +350,14 @@ function generateCampsite() {
         fireY = CONFIG.canvas.height - 100 - Math.random() * 100; // Keep fire on ground
         fireSafe = true;
         
+        // Determine fire size first
+        const fireSize = isLegal ? 20 + Math.random() * 15 : (Math.random() > 0.5 ? 45 + Math.random() * 20 : 20 + Math.random() * 15);
+        const minSafeDistance = fireSize * CONFIG.fire.safeDistanceMultiplier;
+        
         // Check distance from trees
         for (let tree of campsite.trees) {
             const dist = Math.sqrt(Math.pow(fireX - tree.x, 2) + Math.pow(fireY - tree.y, 2));
-            if (dist < CONFIG.fire.minSafeDistance) {
+            if (dist < minSafeDistance) {
                 fireSafe = false;
                 if (!isLegal) break; // For illegal fires, can be close to trees
             }
@@ -329,7 +365,7 @@ function generateCampsite() {
         
         // Check distance from tent
         const tentDist = Math.sqrt(Math.pow(fireX - campsite.tent.x, 2) + Math.pow(fireY - campsite.tent.y, 2));
-        if (tentDist < 80) { // Minimum safe distance from tent
+        if (tentDist < minSafeDistance) {
             fireSafe = false;
             if (!isLegal) fireSafe = true; // Illegal fires can be close to tent
         }
@@ -705,6 +741,19 @@ function shootWaterGun(targetX, targetY) {
     if (gameState.currentCampsite.fire.health <= 0) return;
     
     const fire = gameState.currentCampsite.fire;
+    
+    // Maximum range is 25% of screen width
+    const maxRange = CONFIG.canvas.width * 0.25;
+    const playerCenterX = gameState.playerX + CONFIG.player.width / 2;
+    const playerCenterY = gameState.playerY + CONFIG.player.height / 2;
+    
+    // Distance from player to fire
+    const distToFire = Math.sqrt(Math.pow(playerCenterX - fire.x, 2) + Math.pow(playerCenterY - fire.y, 2));
+    
+    if (distToFire > maxRange) {
+        return; // Too far away to shoot
+    }
+    
     const dist = Math.sqrt(Math.pow(targetX - fire.x, 2) + Math.pow(targetY - fire.y, 2));
     
     if (dist < 100) {
@@ -714,10 +763,10 @@ function shootWaterGun(targetX, targetY) {
         // Create water particles
         for (let i = 0; i < 10; i++) {
             gameState.particles.push({
-                x: gameState.playerX + CONFIG.player.width / 2,
-                y: gameState.playerY + CONFIG.player.height / 2,
-                vx: (targetX - gameState.playerX) / 20 + (Math.random() - 0.5) * 2,
-                vy: (targetY - gameState.playerY) / 20 + (Math.random() - 0.5) * 2,
+                x: playerCenterX,
+                y: playerCenterY,
+                vx: (targetX - playerCenterX) / 20 + (Math.random() - 0.5) * 2,
+                vy: (targetY - playerCenterY) / 20 + (Math.random() - 0.5) * 2,
                 alpha: 1
             });
         }
@@ -732,12 +781,18 @@ function coverFireWithTarp() {
     if (!gameState.currentCampsite || !gameState.currentCampsite.fire) return;
     
     const fire = gameState.currentCampsite.fire;
+    
+    // Maximum range is 25% of screen width
+    const maxRange = CONFIG.canvas.width * 0.25;
+    const playerCenterX = gameState.playerX + CONFIG.player.width / 2;
+    const playerCenterY = gameState.playerY + CONFIG.player.height / 2;
+    
     const dist = Math.sqrt(
-        Math.pow(gameState.playerX - fire.x, 2) + 
-        Math.pow(gameState.playerY - fire.y, 2)
+        Math.pow(playerCenterX - fire.x, 2) + 
+        Math.pow(playerCenterY - fire.y, 2)
     );
     
-    if (dist < 80) {
+    if (dist < maxRange) {
         fire.health = 0;
         gameState.currentCampsite.fireExtinguished = true;
     }
@@ -787,13 +842,24 @@ function toggleFireSafeCheck() {
     const fire = gameState.currentCampsite.fire;
     if (!fire) return;
     
-    // Determine if fire is safe (check distance from trees, tent, and size)
+    // Determine if fire is safe
+    // Must be at least (fireSize * 2) pixels away from trees and tent
+    const minSafeDistance = fire.size * CONFIG.fire.safeDistanceMultiplier;
     const campsite = gameState.currentCampsite;
     let isSafe = !fire.isTooClose && !fire.isTooLarge;
     
-    // Double-check tent distance
+    // Check trees
+    for (let tree of campsite.trees) {
+        const dist = Math.sqrt(Math.pow(fire.x - tree.x, 2) + Math.pow(fire.y - tree.y, 2));
+        if (dist < minSafeDistance) {
+            isSafe = false;
+            break;
+        }
+    }
+    
+    // Check tent
     const tentDist = Math.sqrt(Math.pow(fire.x - campsite.tent.x, 2) + Math.pow(fire.y - campsite.tent.y, 2));
-    if (tentDist < 80) {
+    if (tentDist < minSafeDistance) {
         isSafe = false;
     }
     
