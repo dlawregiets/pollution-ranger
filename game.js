@@ -167,6 +167,13 @@ function setupEventListeners() {
                 verifyLicense(false);
             }
         }
+        
+        // Press R to reset game progress
+        if (e.key.toLowerCase() === 'r' && gameState.gamePhase !== 'tutorial') {
+            if (confirm('Are you sure you want to reset your game progress? This cannot be undone.')) {
+                resetProgress();
+            }
+        }
     });
     
     document.addEventListener('keyup', (e) => {
@@ -1091,13 +1098,27 @@ function restartGame() {
     generateCampsite();
 }
 
+function resetProgress() {
+    gameState.level = 1;
+    gameState.score = 0;
+    gameState.waterGunLevel = 1;
+    gameState.campsitesCompleted = 0;
+    gameState.currentCampsite = null;
+    gameState.particles = [];
+    
+    localStorage.removeItem('pollutionRangerProgress');
+    
+    updateHUD();
+    generateCampsite();
+}
+
 function updateHUD() {
     document.getElementById('level-number').textContent = gameState.level;
     document.getElementById('gun-level').textContent = gameState.waterGunLevel;
     document.getElementById('score-value').textContent = gameState.score;
 }
 
-// Check if player is near license to show menu
+// Check if player is near interactables
 function checkNearInteractables() {
     if (!gameState.isInspecting || !gameState.currentCampsite) return;
     
@@ -1105,28 +1126,14 @@ function checkNearInteractables() {
     const playerCenterX = gameState.playerX + CONFIG.player.width / 2;
     const playerCenterY = gameState.playerY + CONFIG.player.height / 2;
     
-    // Check if near any important element to show menu
-    let nearSomething = false;
-    
+    // Check if player walks into license
     if (campsite.license) {
-        const dist = Math.sqrt(
-            Math.pow(playerCenterX - campsite.license.x, 2) + 
-            Math.pow(playerCenterY - campsite.license.y, 2)
-        );
-        if (dist < 60) nearSomething = true;
-    }
-    
-    if (campsite.fire) {
-        const dist = Math.sqrt(
-            Math.pow(playerCenterX - campsite.fire.x, 2) + 
-            Math.pow(playerCenterY - campsite.fire.y, 2)
-        );
-        if (dist < 100) nearSomething = true;
-    }
-    
-    // Show menu when spacebar pressed near interactables
-    if (nearSomething && gameState.keys[' '] && campsiteMenu.classList.contains('hidden')) {
-        campsiteMenu.classList.remove('hidden');
+        const license = campsite.license;
+        if (playerCenterX >= license.x && playerCenterX <= license.x + license.width &&
+            playerCenterY >= license.y && playerCenterY <= license.y + license.height) {
+            inspectLicense();
+            return;
+        }
     }
 }
 
