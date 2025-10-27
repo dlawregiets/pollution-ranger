@@ -296,6 +296,7 @@ function generateCampsite() {
         license: null,
         inspected: false,
         licenseInspected: false,
+        licenseViewed: false,
         fireExtinguished: false
     };
     
@@ -827,6 +828,7 @@ function verifyLicense(isValid) {
     
     const actuallyValid = gameState.currentCampsite.license && gameState.currentCampsite.license.hasLogo;
     gameState.currentCampsite.licenseInspected = true;
+    gameState.currentCampsite.licenseViewed = true;
     gameState.currentCampsite.playerSaysLicenseValid = isValid;
     gameState.checklist.licenseValid = isValid;
     
@@ -1126,11 +1128,12 @@ function checkNearInteractables() {
     const playerCenterX = gameState.playerX + CONFIG.player.width / 2;
     const playerCenterY = gameState.playerY + CONFIG.player.height / 2;
     
-    // Check if player walks into license
-    if (campsite.license) {
+    // Check if player walks into license (only once per campsite)
+    if (campsite.license && !campsite.licenseViewed) {
         const license = campsite.license;
         if (playerCenterX >= license.x && playerCenterX <= license.x + license.width &&
             playerCenterY >= license.y && playerCenterY <= license.y + license.height) {
+            campsite.licenseViewed = true;
             inspectLicense();
             return;
         }
