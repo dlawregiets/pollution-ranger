@@ -21,9 +21,22 @@ const CONFIG = {
     },
     waterGun: {
         baseDamage: 10,
-        levelUpThreshold: 3
+        levelUpThreshold: 5
     }
 };
+
+// Open burning facts
+const openBurningFacts = [
+    "Some counties where open burning is most noticeable are Madison, McDowell, Mitchell, Polk, Rutherford, Transylvania, Watauga, Wilkes and Yancey counties.",
+    "Some causes are land clearing, bonfires/Campfires, accidental fires from discarded cigarettes or equipment, burning of yard waste.",
+    "Open burning causes serious health effects, including respiratory illnesses, heart disease, cancer, nausea, headaches, and neurological disorders, due to exposure to toxic chemicals.",
+    "People with heart disease, asthma, emphysema or other respiratory diseases are especially sensitive to air pollutants caused by open burning.",
+    "You can experience eye and nose irritation, difficulty breathing, coughing and headaches from the pollution.",
+    "Low-intensity fires reduce understory vegetation and sometimes damage small trees.",
+    "Open burning, particularly wildfires, can cause injury, mortality, and disorientation to animals.",
+    "Burning is only allowed when the AQ forecast is Code green or Code yellow. This rule is often not followed.",
+    "The wind transports pollutants; they settle in our lakes, streams, and soil; and they seep into our ground water."
+];
 
 // Game state
 const gameState = {
@@ -48,7 +61,12 @@ const gameState = {
         hasLicense: null,
         licenseValid: null,
         fireSafe: null
-    }
+    },
+    wildfireTimer: null,
+    factIndex: 0,
+    audioEnabled: true,
+    walkingSoundCooldown: false,
+    fireSoundCooldown: false
 };
 
 // Load progress from localStorage
@@ -60,6 +78,7 @@ function loadProgress() {
         gameState.score = progress.score || 0;
         gameState.waterGunLevel = progress.waterGunLevel || 1;
         gameState.campsitesCompleted = progress.campsitesCompleted || 0;
+        gameState.factIndex = progress.factIndex || 0;
     }
 }
 
@@ -69,7 +88,8 @@ function saveProgress() {
         level: gameState.level,
         score: gameState.score,
         waterGunLevel: gameState.waterGunLevel,
-        campsitesCompleted: gameState.campsitesCompleted
+        campsitesCompleted: gameState.campsitesCompleted,
+        factIndex: gameState.factIndex
     };
     localStorage.setItem('pollutionRangerProgress', JSON.stringify(progress));
 }
@@ -86,7 +106,7 @@ const tutorialSteps = [
     },
     {
         title: "Legal Campfires",
-        text: "A LEGAL campfire must have:\n• A valid license with a campfire logo\n• Safe distance from trees (at least 80 pixels)\n• Appropriate size (not too large)"
+        text: "A legal campfire must have:\n• A valid license with a campfire logo\n• Safe distance from trees (at least 80 pixels)\n• Appropriate size (not too large)"
     },
     {
         title: "Extinguishing Fires",
@@ -98,17 +118,48 @@ const tutorialSteps = [
     },
     {
         title: "Making Decisions",
-        text: "After inspection, mark the campsite:\n• LEGAL: If it meets all requirements\n• ILLEGAL: If it violates any rules\n\nBe careful! Wrong decisions end the game!"
+        text: "After inspection, mark the campsite:\n• Legal: If it meets all requirements\n• Illegal: If it violates any rules\n\nBe careful! Wrong decisions end the game!"
+    },
+    {
+        title: "Audio Settings",
+        text: "You can enable or disable audio in this game:\n• Click the speaker icon in the bottom left corner\n• Audio is currently enabled by default\n• Toggle it anytime during gameplay\n• For the best experience, use headphones to enjoy the immersive forest sounds!"
+    },
+    {
+        title: "Resetting Progress",
+        text: "If you need to start over, press Shift + R to reset your game progress.\nA confirmation popup will appear to prevent accidental resets.\n\nThis will clear your score, level, and water gun upgrades."
     },
     {
         title: "Special Events",
-        text: "In rare dry conditions, wildfires may occur!\nYou'll need to surround the fire to contain it.\n\nGood luck, Ranger! Let's protect our forests!"
+        text: "In rare dry conditions, wildfires may occur!\nYou'll need to surround the fire to contain it.\n\nEvery 25 campsites, a massive wildfire event happens!\nPut out all fires within 1 minute or lose the game.\n\nGood luck, Ranger! Let's protect our forests!"
     }
 ];
 
 // Canvas and context
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
+
+// Audio context
+let audioContext;
+let ambientMusic;
+let isAmbientPlaying = false;
+
+function initAudio() {
+    try {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        // Resume audio context on first user interaction
+        const resumeAudio = () => {
+            if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+            document.removeEventListener('click', resumeAudio);
+            document.removeEventListener('keydown', resumeAudio);
+        };
+        document.addEventListener('click', resumeAudio);
+        document.addEventListener('keydown', resumeAudio);
+    } catch (e) {
+        console.warn('Web Audio API not supported');
+    }
+}
 
 // UI elements
 const tutorialDiv = document.getElementById('tutorial');
@@ -123,12 +174,23 @@ const gameOverDiv = document.getElementById('game-over');
 const resultMessage = document.getElementById('result-message');
 const resultTitle = document.getElementById('result-title');
 const resultText = document.getElementById('result-text');
+const bibliographyDiv = document.getElementById('bibliography');
+const bibliographyClose = document.getElementById('bibliography-close');
+const bibliographyLink = document.getElementById('bibliography-link');
+const audioToggle = document.getElementById('audio-toggle');
 
 // Initialize game
 function init() {
+    // Ensure DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+        return;
+    }
+
+    initAudio();
     loadProgress();
     setupEventListeners();
-    
+
     // Check if tutorial has been shown before
     const tutorialShown = localStorage.getItem('pollutionRangerTutorialShown');
     if (!tutorialShown) {
@@ -138,8 +200,11 @@ function init() {
         // Start game directly
         gameState.gamePhase = 'travel';
         generateCampsite();
+        if (gameState.audioEnabled) {
+            startAmbientMusic();
+        }
     }
-    
+
     updateHUD();
     gameLoop();
 }
@@ -168,8 +233,8 @@ function setupEventListeners() {
             }
         }
         
-        // Press R to reset game progress
-        if (e.key.toLowerCase() === 'r' && gameState.gamePhase !== 'tutorial') {
+        // Press Shift + R to reset game progress
+        if (e.key.toLowerCase() === 'r' && e.shiftKey && gameState.gamePhase !== 'tutorial') {
             if (confirm('Are you sure you want to reset your game progress? This cannot be undone.')) {
                 resetProgress();
             }
@@ -221,19 +286,32 @@ function setupEventListeners() {
     document.getElementById('check-fire-safe').addEventListener('click', toggleFireSafeCheck);
     
     // Decision buttons
-    document.getElementById('mark-safe').addEventListener('click', () => makeDecision(true));
-    document.getElementById('mark-unsafe').addEventListener('click', () => makeDecision(false));
+    document.getElementById('mark-legal').addEventListener('click', () => makeDecision(true));
+    document.getElementById('mark-illegal').addEventListener('click', () => makeDecision(false));
     
     // Next campsite button
     document.getElementById('next-campsite').addEventListener('click', goToNextCampsite);
     
     // Menu buttons (kept for backward compatibility but hidden)
     document.getElementById('inspect-license').addEventListener('click', inspectLicense);
-    document.getElementById('mark-legal').addEventListener('click', () => markCampsite(true));
-    document.getElementById('mark-illegal').addEventListener('click', () => markCampsite(false));
+    document.getElementById('menu-mark-legal').addEventListener('click', () => markCampsite(true));
+    document.getElementById('menu-mark-illegal').addEventListener('click', () => markCampsite(false));
     
     // Restart button
     document.getElementById('restart-game').addEventListener('click', restartGame);
+
+    // Bibliography
+    bibliographyLink.addEventListener('click', showBibliography);
+    bibliographyClose.addEventListener('click', hideBibliography);
+    bibliographyDiv.addEventListener('click', (e) => {
+        if (e.target === bibliographyDiv) {
+            hideBibliography();
+        }
+    });
+
+    // Audio toggle
+    audioToggle.addEventListener('click', toggleAudio);
+    updateAudioIcon();
 }
 
 // Tutorial functions
@@ -269,13 +347,404 @@ function nextTutorialStep() {
 
 function startGame() {
     tutorialDiv.classList.add('hidden');
-    
+
     // Resume previous phase if reopening tutorial, otherwise start new game
     if (gameState.previousPhase && gameState.previousPhase !== 'tutorial' && gameState.currentCampsite) {
         gameState.gamePhase = gameState.previousPhase;
     } else {
         gameState.gamePhase = 'travel';
         generateCampsite();
+    }
+}
+
+function showBibliography() {
+    bibliographyDiv.classList.remove('hidden');
+    document.getElementById('hud').style.display = 'none';
+    document.getElementById('checklist').style.display = 'none';
+}
+
+function hideBibliography() {
+    bibliographyDiv.classList.add('hidden');
+    document.getElementById('hud').style.display = 'flex';
+    document.getElementById('checklist').style.display = 'block';
+}
+
+function toggleAudio() {
+    gameState.audioEnabled = !gameState.audioEnabled;
+    updateAudioIcon();
+
+    if (gameState.audioEnabled) {
+        startAmbientMusic();
+    } else {
+        stopAmbientMusic();
+    }
+}
+
+function updateAudioIcon() {
+    const audioToggle = document.getElementById('audio-toggle');
+    audioToggle.textContent = gameState.audioEnabled ? '🔊' : '🔇';
+}
+
+// Audio functions
+function createTone(frequency, duration, type = 'sine') {
+    if (!audioContext || !gameState.audioEnabled || audioContext.state !== 'running') return;
+
+    try {
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+
+        oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+        oscillator.type = type;
+
+        gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
+
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + duration);
+    } catch (e) {
+        console.warn('Error creating tone:', e);
+    }
+}
+
+function playWaterSplash() {
+    if (!gameState.audioEnabled || !audioContext || audioContext.state !== 'running') return;
+    // Water splash sound - more natural with bubbles
+    try {
+        const bufferSize = audioContext.sampleRate * 0.3; // 300ms
+        const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+        const data = buffer.getChannelData(0);
+
+        // Generate water splash with bubbles
+        for (let i = 0; i < bufferSize; i++) {
+            const t = i / bufferSize;
+            // Main splash - filtered noise
+            const splash = (Math.random() * 2 - 1) * Math.exp(-t * 4) * 0.3;
+            // Bubble pops - occasional high-frequency bursts
+            const bubbles = (Math.random() > 0.95 ? (Math.random() * 2 - 1) * 0.1 : 0) * Math.exp(-t * 2);
+            // Low-frequency rumble
+            const rumble = Math.sin(2 * Math.PI * 60 * t) * Math.exp(-t * 3) * 0.05;
+
+            data[i] = splash + bubbles + rumble;
+        }
+
+        const source = audioContext.createBufferSource();
+        const gainNode = audioContext.createGain();
+        const filter = audioContext.createBiquadFilter();
+
+        source.buffer = buffer;
+        source.connect(filter);
+        filter.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(2000, audioContext.currentTime);
+
+        gainNode.gain.setValueAtTime(0.08, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+
+        source.start(audioContext.currentTime);
+    } catch (e) {
+        console.warn('Error playing water splash:', e);
+    }
+}
+
+function playTarpSwish() {
+    if (!gameState.audioEnabled || !audioContext || audioContext.state !== 'running') return;
+    try {
+        // Tarp swish sound - filtered noise sweep
+        const bufferSize = audioContext.sampleRate * 0.3; // 300ms
+        const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+        const data = buffer.getChannelData(0);
+
+        // Generate filtered noise with frequency sweep
+        for (let i = 0; i < bufferSize; i++) {
+            const t = i / bufferSize;
+            const freq = 200 + t * 400; // Sweep from 200 to 600 Hz
+            const sample = (Math.random() * 2 - 1) * Math.sin(2 * Math.PI * freq * t) * Math.exp(-t * 2); // Filtered noise
+            data[i] = sample * 0.3;
+        }
+
+        const source = audioContext.createBufferSource();
+        const gainNode = audioContext.createGain();
+
+        source.buffer = buffer;
+        source.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+
+        gainNode.gain.setValueAtTime(0.08, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+
+        source.start(audioContext.currentTime);
+    } catch (e) {
+        console.warn('Error playing tarp swish:', e);
+    }
+}
+
+function playWalkingSound() {
+    if (!gameState.audioEnabled || !audioContext || audioContext.state !== 'running') return;
+    try {
+        // Walking sound - subtle crunch noise
+        const bufferSize = audioContext.sampleRate * 0.15; // 150ms
+        const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+        const data = buffer.getChannelData(0);
+
+        // Generate subtle crunch noise
+        for (let i = 0; i < bufferSize; i++) {
+            const t = i / bufferSize;
+            const noise = (Math.random() * 2 - 1) * Math.exp(-t * 3); // Quick decay
+            const crunch = Math.sin(2 * Math.PI * 80 * t) * noise * 0.1; // Low frequency modulation
+            data[i] = crunch;
+        }
+
+        const source = audioContext.createBufferSource();
+        const gainNode = audioContext.createGain();
+
+        source.buffer = buffer;
+        source.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+
+        gainNode.gain.setValueAtTime(0.02, audioContext.currentTime);
+
+        source.start(audioContext.currentTime);
+    } catch (e) {
+        console.warn('Error playing walking sound:', e);
+    }
+}
+
+function playFireSound() {
+    if (!gameState.audioEnabled || !audioContext || audioContext.state !== 'running') return;
+    // Fire crackling sound - subtle pops and crackles
+    const playCrackle = () => {
+        if (!gameState.audioEnabled || !audioContext || audioContext.state !== 'running') return;
+        try {
+            const bufferSize = audioContext.sampleRate * (0.02 + Math.random() * 0.08); // 20-100ms
+            const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+            const data = buffer.getChannelData(0);
+
+            // Generate crackling noise
+            for (let i = 0; i < bufferSize; i++) {
+                const t = i / bufferSize;
+                const crackle = (Math.random() * 2 - 1) * Math.exp(-t * 5) * 0.05; // Very subtle
+                data[i] = crackle;
+            }
+
+            const source = audioContext.createBufferSource();
+            const gainNode = audioContext.createGain();
+            const filter = audioContext.createBiquadFilter();
+
+            source.buffer = buffer;
+            source.connect(filter);
+            filter.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            filter.type = 'bandpass';
+            filter.frequency.setValueAtTime(1000 + Math.random() * 2000, audioContext.currentTime);
+            filter.Q.setValueAtTime(1, audioContext.currentTime);
+
+            gainNode.gain.setValueAtTime(0.01, audioContext.currentTime);
+
+            source.start(audioContext.currentTime);
+        } catch (e) {
+            console.warn('Error playing fire crackle:', e);
+        }
+    };
+
+    // Play random crackles
+    for (let i = 0; i < 2; i++) {
+        setTimeout(playCrackle, Math.random() * 1500);
+    }
+}
+
+function startAmbientMusic() {
+    if (!audioContext || !gameState.audioEnabled || audioContext.state !== 'running' || isAmbientPlaying) return;
+
+    try {
+        // Create simple forest ambient sound using oscillators
+        const windOsc = audioContext.createOscillator();
+        const rustleOsc = audioContext.createOscillator();
+        const windGain = audioContext.createGain();
+        const rustleGain = audioContext.createGain();
+        const masterGain = audioContext.createGain();
+        const windFilter = audioContext.createBiquadFilter();
+
+        // Wind sound - low frequency oscillator with noise modulation
+        windOsc.frequency.setValueAtTime(45, audioContext.currentTime);
+        windOsc.type = 'sine';
+
+        // Rustling leaves - higher frequency with slow modulation
+        rustleOsc.frequency.setValueAtTime(180, audioContext.currentTime);
+        rustleOsc.type = 'triangle';
+
+        // Connect wind
+        windOsc.connect(windFilter);
+        windFilter.connect(windGain);
+        windGain.connect(masterGain);
+
+        // Connect rustle
+        rustleOsc.connect(rustleGain);
+        rustleGain.connect(masterGain);
+
+        masterGain.connect(audioContext.destination);
+
+        // Filter settings
+        windFilter.type = 'lowpass';
+        windFilter.frequency.setValueAtTime(200, audioContext.currentTime);
+
+        // Gain settings - fade in
+        windGain.gain.setValueAtTime(0, audioContext.currentTime);
+        windGain.gain.linearRampToValueAtTime(0.04, audioContext.currentTime + 2);
+
+        rustleGain.gain.setValueAtTime(0, audioContext.currentTime);
+        rustleGain.gain.linearRampToValueAtTime(0.02, audioContext.currentTime + 2);
+
+        masterGain.gain.setValueAtTime(0, audioContext.currentTime);
+        masterGain.gain.linearRampToValueAtTime(1, audioContext.currentTime + 2);
+
+        windOsc.start(audioContext.currentTime);
+        rustleOsc.start(audioContext.currentTime);
+
+        ambientMusic = { windOsc, rustleOsc, masterGain };
+        isAmbientPlaying = true;
+    } catch (e) {
+        console.warn('Error starting ambient music:', e);
+    }
+}
+
+function playBirdChirp() {
+    if (!gameState.audioEnabled || !audioContext || audioContext.state !== 'running') return;
+
+    try {
+        // Create a very subtle, natural bird chirp
+        const chirpDuration = 0.2 + Math.random() * 0.3; // 200-500ms
+        const bufferSize = audioContext.sampleRate * chirpDuration;
+        const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+        const data = buffer.getChannelData(0);
+
+        // Generate very gentle chirp
+        for (let i = 0; i < bufferSize; i++) {
+            const t = i / bufferSize;
+            const freq = 1800 + t * 800; // Gentle rising frequency
+            const chirp = Math.sin(2 * Math.PI * freq * t) * Math.exp(-t * 3) * 0.0005; // Extremely quiet
+            data[i] = chirp;
+        }
+
+        const source = audioContext.createBufferSource();
+        const gainNode = audioContext.createGain();
+        const filter = audioContext.createBiquadFilter();
+
+        source.buffer = buffer;
+        source.connect(filter);
+        filter.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+
+        filter.type = 'highpass';
+        filter.frequency.setValueAtTime(1500, audioContext.currentTime); // Filter out low frequencies
+
+        gainNode.gain.setValueAtTime(0.001, audioContext.currentTime); // Louder
+
+        source.start(audioContext.currentTime);
+    } catch (e) {
+        console.warn('Error playing bird chirp:', e);
+    }
+}
+
+function playCricketChirp() {
+    if (!gameState.audioEnabled || !audioContext || audioContext.state !== 'running') return;
+
+    try {
+        // Create cricket chirping sound
+        const chirpDuration = 0.8 + Math.random() * 0.4; // 800-1200ms
+        const bufferSize = audioContext.sampleRate * chirpDuration;
+        const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+        const data = buffer.getChannelData(0);
+
+        // Generate cricket-like chirps with multiple pulses
+        for (let i = 0; i < bufferSize; i++) {
+            const t = i / bufferSize;
+            let chirp = 0;
+
+            // Multiple chirp pulses
+            for (let pulse = 0; pulse < 3; pulse++) {
+                const pulseTime = pulse * 0.3;
+                const pulseT = Math.max(0, t - pulseTime);
+                if (pulseT < 0.1) {
+                    const freq = 3000 + Math.sin(pulseT * Math.PI * 20) * 500;
+                    chirp += Math.sin(2 * Math.PI * freq * pulseT) * Math.exp(-pulseT * 15) * 0.0002;
+                }
+            }
+
+            data[i] = chirp;
+        }
+
+        const source = audioContext.createBufferSource();
+        const gainNode = audioContext.createGain();
+
+        source.buffer = buffer;
+        source.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+
+        gainNode.gain.setValueAtTime(0.0012, audioContext.currentTime); // Louder
+
+        source.start(audioContext.currentTime);
+    } catch (e) {
+        console.warn('Error playing cricket chirp:', e);
+    }
+}
+
+function playFrogCroak() {
+    if (!gameState.audioEnabled || !audioContext || audioContext.state !== 'running') return;
+
+    try {
+        // Create frog croaking sound
+        const croakDuration = 0.6 + Math.random() * 0.4; // 600-1000ms
+        const bufferSize = audioContext.sampleRate * croakDuration;
+        const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+        const data = buffer.getChannelData(0);
+
+        // Generate frog-like croak with descending frequency
+        for (let i = 0; i < bufferSize; i++) {
+            const t = i / bufferSize;
+            const freq = 400 - t * 200; // Descending frequency
+            const croak = Math.sin(2 * Math.PI * freq * t) * Math.sin(2 * Math.PI * 2 * t) * Math.exp(-t * 2) * 0.0003;
+            data[i] = croak;
+        }
+
+        const source = audioContext.createBufferSource();
+        const gainNode = audioContext.createGain();
+
+        source.buffer = buffer;
+        source.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+
+        gainNode.gain.setValueAtTime(0.001, audioContext.currentTime); // Louder
+
+        source.start(audioContext.currentTime);
+    } catch (e) {
+        console.warn('Error playing frog croak:', e);
+    }
+}
+
+function stopAmbientMusic() {
+    if (ambientMusic && isAmbientPlaying) {
+        try {
+            ambientMusic.masterGain.gain.setValueAtTime(ambientMusic.masterGain.gain.value, audioContext.currentTime);
+            ambientMusic.masterGain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 1);
+
+            setTimeout(() => {
+                if (ambientMusic) {
+                    ambientMusic.windOsc.stop();
+                    ambientMusic.rustleOsc.stop();
+                    ambientMusic = null;
+                }
+            }, 1000);
+        } catch (e) {
+            console.warn('Error stopping ambient music:', e);
+        }
+
+        isAmbientPlaying = false;
     }
 }
 
@@ -350,50 +819,81 @@ function generateCampsite() {
         }
     }
     
-    // Generate fire position
-    let fireX, fireY, fireSafe;
-    let attempts = 0;
-    do {
-        fireX = 250 + Math.random() * 300;
-        fireY = CONFIG.canvas.height - 100 - Math.random() * 100; // Keep fire on ground
-        fireSafe = true;
-        
-        // Determine fire size first
-        const fireSize = isLegal ? 20 + Math.random() * 15 : (Math.random() > 0.5 ? 45 + Math.random() * 20 : 20 + Math.random() * 15);
-        const minSafeDistance = fireSize * CONFIG.fire.safeDistanceMultiplier;
-        
-        // Check distance from trees
-        for (let tree of campsite.trees) {
-            const dist = Math.sqrt(Math.pow(fireX - tree.x, 2) + Math.pow(fireY - tree.y, 2));
-            if (dist < minSafeDistance) {
-                fireSafe = false;
-                if (!isLegal) break; // For illegal fires, can be close to trees
+    // Check if this should be a wildfire event
+    const isWildfireEvent = gameState.campsitesCompleted > 0 && (gameState.campsitesCompleted + 1) % 25 === 0;
+
+    if (isWildfireEvent) {
+        // Generate multiple fires covering most of the map
+        campsite.fires = [];
+        const numFires = 15 + Math.floor(Math.random() * 10); // 15-25 fires
+
+        for (let i = 0; i < numFires; i++) {
+            let fireX, fireY;
+            let attempts = 0;
+            do {
+                fireX = 50 + Math.random() * (CONFIG.canvas.width - 100);
+                fireY = CONFIG.canvas.height * 0.4 + Math.random() * (CONFIG.canvas.height * 0.6 - 100);
+                attempts++;
+            } while (attempts < 10); // Just place them randomly
+
+            campsite.fires.push({
+                x: fireX,
+                y: fireY,
+                size: 30 + Math.random() * 20,
+                health: CONFIG.fire.health,
+                isWildfire: true
+            });
+        }
+
+        campsite.isWildfire = true;
+        campsite.fire = campsite.fires[0]; // For compatibility
+        gameState.wildfireTimer = 60; // 60 seconds
+    } else {
+        // Generate fire position
+        let fireX, fireY, fireSafe;
+        let attempts = 0;
+        do {
+            fireX = 250 + Math.random() * 300;
+            fireY = CONFIG.canvas.height - 100 - Math.random() * 100; // Keep fire on ground
+            fireSafe = true;
+
+            // Determine fire size first
+            const fireSize = isLegal ? 20 + Math.random() * 15 : (Math.random() > 0.5 ? 45 + Math.random() * 20 : 20 + Math.random() * 15);
+            const minSafeDistance = fireSize * CONFIG.fire.safeDistanceMultiplier;
+
+            // Check distance from trees
+            for (let tree of campsite.trees) {
+                const dist = Math.sqrt(Math.pow(fireX - tree.x, 2) + Math.pow(fireY - tree.y, 2));
+                if (dist < minSafeDistance) {
+                    fireSafe = false;
+                    if (!isLegal) break; // For illegal fires, can be close to trees
+                }
             }
-        }
-        
-        // Check distance from tent
-        const tentDist = Math.sqrt(Math.pow(fireX - campsite.tent.x, 2) + Math.pow(fireY - campsite.tent.y, 2));
-        if (tentDist < minSafeDistance) {
-            fireSafe = false;
-            if (!isLegal) fireSafe = true; // Illegal fires can be close to tent
-        }
-        
-        attempts++;
-        // If legal, keep trying for safe position. If illegal, allow unsafe position after attempts
-        if (isLegal && !fireSafe && attempts < 20) continue;
-        if (!isLegal && attempts > 5) break;
-    } while (isLegal && !fireSafe && attempts < 20);
-    
-    const fireSize = isLegal ? 20 + Math.random() * 15 : (Math.random() > 0.5 ? 45 + Math.random() * 20 : 20 + Math.random() * 15);
-    
-    campsite.fire = {
-        x: fireX,
-        y: fireY,
-        size: fireSize,
-        health: CONFIG.fire.health,
-        isTooLarge: fireSize > CONFIG.fire.maxSize,
-        isTooClose: !fireSafe
-    };
+
+            // Check distance from tent
+            const tentDist = Math.sqrt(Math.pow(fireX - campsite.tent.x, 2) + Math.pow(fireY - campsite.tent.y, 2));
+            if (tentDist < minSafeDistance) {
+                fireSafe = false;
+                if (!isLegal) fireSafe = true; // Illegal fires can be close to tent
+            }
+
+            attempts++;
+            // If legal, keep trying for safe position. If illegal, allow unsafe position after attempts
+            if (isLegal && !fireSafe && attempts < 20) continue;
+            if (!isLegal && attempts > 5) break;
+        } while (isLegal && !fireSafe && attempts < 20);
+
+        const fireSize = isLegal ? 20 + Math.random() * 15 : (Math.random() > 0.5 ? 45 + Math.random() * 20 : 20 + Math.random() * 15);
+
+        campsite.fire = {
+            x: fireX,
+            y: fireY,
+            size: fireSize,
+            health: CONFIG.fire.health,
+            isTooLarge: fireSize > CONFIG.fire.maxSize,
+            isTooClose: !fireSafe
+        };
+    }
     
     // Generate people with animation state
     const numPeople = 2 + Math.floor(Math.random() * 3);
@@ -467,6 +967,32 @@ function drawPlayer() {
     // Badge
     ctx.fillStyle = '#FFD700';
     ctx.fillRect(gameState.playerX + 13, gameState.playerY + 22, 6, 6);
+
+    // Water gun in hand
+    ctx.fillStyle = '#4169E1'; // Royal blue for water gun
+    if (gameState.facingRight) {
+        // Right hand - angled water gun
+        ctx.save();
+        ctx.translate(gameState.playerX + 28, gameState.playerY + 24);
+        ctx.rotate(-0.5); // More pronounced upward angle
+        ctx.fillRect(-8, -2, 12, 4); // barrel
+        ctx.fillRect(-2, 2, 6, 8); // handle
+        ctx.fillStyle = '#000080'; // Darker blue for details
+        ctx.fillRect(-8, 0, 12, 2); // barrel top
+        ctx.fillRect(2, 4, 2, 4); // trigger
+        ctx.restore();
+    } else {
+        // Left hand - angled water gun
+        ctx.save();
+        ctx.translate(gameState.playerX + 8, gameState.playerY + 24);
+        ctx.rotate(0.3); // Slight upward angle
+        ctx.fillRect(-4, -2, 12, 4); // barrel
+        ctx.fillRect(4, 2, 6, 8); // handle
+        ctx.fillStyle = '#000080'; // Darker blue for details
+        ctx.fillRect(-4, 0, 12, 2); // barrel top
+        ctx.fillRect(6, 4, 2, 4); // trigger
+        ctx.restore();
+    }
 }
 
 function drawTree(tree) {
@@ -484,36 +1010,45 @@ function drawTree(tree) {
 }
 
 function drawFire(fire) {
+    // If fire is covered with tarp, draw black square
+    if (fire.isCovered) {
+        ctx.fillStyle = '#000';
+        ctx.fillRect(fire.x - fire.size / 2, fire.y - fire.size / 2, fire.size, fire.size);
+        return;
+    }
+
     const baseSize = Math.max(5, fire.size * (fire.health / CONFIG.fire.health));
-    
+
     // Fire animation
     const flicker = Math.sin(Date.now() / 100) * 3;
-    
+
     // Red base
     ctx.fillStyle = '#FF4500';
     ctx.beginPath();
     ctx.arc(fire.x, fire.y, Math.max(1, baseSize / 2 + flicker), 0, Math.PI * 2);
     ctx.fill();
-    
+
     // Orange middle
     ctx.fillStyle = '#FF8C00';
     ctx.beginPath();
     ctx.arc(fire.x, fire.y - 5, Math.max(1, baseSize / 3 + flicker), 0, Math.PI * 2);
     ctx.fill();
-    
+
     // Yellow top
     ctx.fillStyle = '#FFD700';
     ctx.beginPath();
     ctx.arc(fire.x, fire.y - 10, Math.max(1, baseSize / 4 + flicker), 0, Math.PI * 2);
     ctx.fill();
-    
-    // Health bar
-    const barWidth = 50;
-    const barHeight = 5;
-    ctx.fillStyle = '#333';
-    ctx.fillRect(fire.x - barWidth / 2, fire.y - baseSize - 10, barWidth, barHeight);
-    ctx.fillStyle = fire.health > 50 ? '#4CAF50' : fire.health > 25 ? '#FFA500' : '#F44336';
-    ctx.fillRect(fire.x - barWidth / 2, fire.y - baseSize - 10, barWidth * (fire.health / CONFIG.fire.health), barHeight);
+
+    // Health bar (only for regular fires, not wildfires)
+    if (!fire.isWildfire) {
+        const barWidth = 50;
+        const barHeight = 5;
+        ctx.fillStyle = '#333';
+        ctx.fillRect(fire.x - barWidth / 2, fire.y - baseSize - 10, barWidth, barHeight);
+        ctx.fillStyle = fire.health > 50 ? '#4CAF50' : fire.health > 25 ? '#FFA500' : '#F44336';
+        ctx.fillRect(fire.x - barWidth / 2, fire.y - baseSize - 10, barWidth * (fire.health / CONFIG.fire.health), barHeight);
+    }
 }
 
 function drawTent(tent) {
@@ -621,14 +1156,6 @@ function drawBackground() {
     // Ground
     ctx.fillStyle = '#8B7355';
     ctx.fillRect(0, CONFIG.canvas.height * 0.4, CONFIG.canvas.width, CONFIG.canvas.height * 0.6);
-    
-    // Static grass patches
-    ctx.fillStyle = '#6B8E23';
-    for (let i = 0; i < 40; i++) {
-        const x = (i * 35) % CONFIG.canvas.width;
-        const y = CONFIG.canvas.height * 0.4 + (i * 17) % 200;
-        ctx.fillRect(x, y, 25, 4);
-    }
 }
 
 function drawCampsite() {
@@ -644,7 +1171,26 @@ function drawCampsite() {
     campsite.people.forEach(person => drawPerson(person));
     if (campsite.license) drawLicense(campsite.license);
     if (campsite.fire && campsite.fire.health > 0) drawFire(campsite.fire);
+    if (campsite.fires) {
+        campsite.fires.forEach(fire => {
+            if (fire.health > 0) drawFire(fire);
+        });
+    }
     drawPlayer();
+
+    // Draw wildfire timer
+    if (gameState.wildfireTimer !== null) {
+        ctx.fillStyle = '#FFF';
+        ctx.font = 'bold 24px monospace';
+        ctx.fillText(`Time: ${Math.ceil(gameState.wildfireTimer)}s`, 10, 30);
+    }
+
+    // Play fire sounds periodically
+    if (gameState.currentCampsite && (gameState.currentCampsite.fire || gameState.currentCampsite.fires) && !gameState.fireSoundCooldown) {
+        playFireSound();
+        gameState.fireSoundCooldown = true;
+        setTimeout(() => gameState.fireSoundCooldown = false, 2000); // Play fire sound every 2 seconds
+    }
     
     // Draw particles
     gameState.particles.forEach((particle, index) => {
@@ -714,10 +1260,10 @@ function updateCampers() {
 // Game logic
 function handlePlayerMovement() {
     if (!gameState.isInspecting) return;
-    
+
     const keys = gameState.keys;
     let moved = false;
-    
+
     if (keys['arrowleft'] || keys['a']) {
         gameState.playerX -= CONFIG.player.speed;
         gameState.facingRight = false;
@@ -736,73 +1282,152 @@ function handlePlayerMovement() {
         gameState.playerY += CONFIG.player.speed;
         moved = true;
     }
-    
+
     // Boundary checking
     gameState.playerX = Math.max(0, Math.min(CONFIG.canvas.width - CONFIG.player.width, gameState.playerX));
-    gameState.playerY = Math.max(0, Math.min(CONFIG.canvas.height - CONFIG.player.height, gameState.playerY));
-    
+    gameState.playerY = Math.max(CONFIG.canvas.height * 0.4, Math.min(CONFIG.canvas.height - CONFIG.player.height, gameState.playerY));
+
     gameState.isMoving = moved;
+
+    // Play walking sound when moving
+    if (moved && !gameState.walkingSoundCooldown) {
+        playWalkingSound();
+        gameState.walkingSoundCooldown = true;
+        setTimeout(() => gameState.walkingSoundCooldown = false, 300); // Prevent sound spam
+    }
 }
 
 function shootWaterGun(targetX, targetY) {
-    if (!gameState.currentCampsite || !gameState.currentCampsite.fire) return;
-    if (gameState.currentCampsite.fire.health <= 0) return;
-    
-    const fire = gameState.currentCampsite.fire;
-    
-    // Maximum range is 25% of screen width
-    const maxRange = CONFIG.canvas.width * 0.25;
+    if (!gameState.currentCampsite) return;
+
+    const campsite = gameState.currentCampsite;
+
+    // Maximum range is 15% of screen width
+    const maxRange = CONFIG.canvas.width * 0.15;
     const playerCenterX = gameState.playerX + CONFIG.player.width / 2;
     const playerCenterY = gameState.playerY + CONFIG.player.height / 2;
-    
-    // Distance from player to fire
-    const distToFire = Math.sqrt(Math.pow(playerCenterX - fire.x, 2) + Math.pow(playerCenterY - fire.y, 2));
-    
-    if (distToFire > maxRange) {
-        return; // Too far away to shoot
+
+    let hitFire = false;
+
+    if (campsite.fires) {
+        // Handle multiple fires (wildfire)
+        campsite.fires.forEach(fire => {
+            if (fire.health <= 0) return;
+
+            const distToFire = Math.sqrt(Math.pow(playerCenterX - fire.x, 2) + Math.pow(playerCenterY - fire.y, 2));
+
+            if (distToFire > maxRange) return;
+
+            const dist = Math.sqrt(Math.pow(targetX - fire.x, 2) + Math.pow(targetY - fire.y, 2));
+
+            if (dist < 100) {
+                const damage = CONFIG.waterGun.baseDamage * gameState.waterGunLevel;
+                fire.health = Math.max(0, fire.health - damage);
+                hitFire = true;
+
+                // Create water particles
+                for (let i = 0; i < 10; i++) {
+                    gameState.particles.push({
+                        x: playerCenterX,
+                        y: playerCenterY,
+                        vx: (targetX - playerCenterX) / 20 + (Math.random() - 0.5) * 2,
+                        vy: (targetY - playerCenterY) / 20 + (Math.random() - 0.5) * 2,
+                        alpha: 1
+                    });
+                }
+            }
+        });
+
+        // Check if all fires are extinguished
+        const allExtinguished = campsite.fires.every(fire => fire.health <= 0);
+        if (allExtinguished) {
+            campsite.fireExtinguished = true;
+        }
+    } else if (campsite.fire && campsite.fire.health > 0) {
+        // Handle single fire
+        const fire = campsite.fire;
+        const distToFire = Math.sqrt(Math.pow(playerCenterX - fire.x, 2) + Math.pow(playerCenterY - fire.y, 2));
+
+        if (distToFire > maxRange) return;
+
+        const dist = Math.sqrt(Math.pow(targetX - fire.x, 2) + Math.pow(targetY - fire.y, 2));
+
+        if (dist < 100) {
+            const damage = CONFIG.waterGun.baseDamage * gameState.waterGunLevel;
+            fire.health = Math.max(0, fire.health - damage);
+            hitFire = true;
+
+            // Create water particles
+            for (let i = 0; i < 10; i++) {
+                gameState.particles.push({
+                    x: playerCenterX,
+                    y: playerCenterY,
+                    vx: (targetX - playerCenterX) / 20 + (Math.random() - 0.5) * 2,
+                    vy: (targetY - playerCenterY) / 20 + (Math.random() - 0.5) * 2,
+                    alpha: 1
+                });
+            }
+
+            if (fire.health <= 0) {
+                campsite.fireExtinguished = true;
+            }
+        }
     }
-    
-    const dist = Math.sqrt(Math.pow(targetX - fire.x, 2) + Math.pow(targetY - fire.y, 2));
-    
-    if (dist < 100) {
-        const damage = CONFIG.waterGun.baseDamage * gameState.waterGunLevel;
-        fire.health = Math.max(0, fire.health - damage);
-        
-        // Create water particles
-        for (let i = 0; i < 10; i++) {
-            gameState.particles.push({
-                x: playerCenterX,
-                y: playerCenterY,
-                vx: (targetX - playerCenterX) / 20 + (Math.random() - 0.5) * 2,
-                vy: (targetY - playerCenterY) / 20 + (Math.random() - 0.5) * 2,
-                alpha: 1
-            });
-        }
-        
-        if (fire.health <= 0) {
-            gameState.currentCampsite.fireExtinguished = true;
-        }
+
+    if (hitFire) {
+        playWaterSplash();
     }
 }
 
 function coverFireWithTarp() {
-    if (!gameState.currentCampsite || !gameState.currentCampsite.fire) return;
-    
-    const fire = gameState.currentCampsite.fire;
-    
-    // Maximum range is 25% of screen width
-    const maxRange = CONFIG.canvas.width * 0.25;
+    if (!gameState.currentCampsite) return;
+
+    const campsite = gameState.currentCampsite;
+
+    // Maximum range is 15% of screen width
+    const maxRange = CONFIG.canvas.width * 0.15;
     const playerCenterX = gameState.playerX + CONFIG.player.width / 2;
     const playerCenterY = gameState.playerY + CONFIG.player.height / 2;
-    
-    const dist = Math.sqrt(
-        Math.pow(playerCenterX - fire.x, 2) + 
-        Math.pow(playerCenterY - fire.y, 2)
-    );
-    
-    if (dist < maxRange) {
-        fire.health = 0;
-        gameState.currentCampsite.fireExtinguished = true;
+
+    let coveredFire = false;
+
+    if (campsite.fires) {
+        // Handle multiple fires (wildfire)
+        campsite.fires.forEach(fire => {
+            if (fire.health <= 0) return;
+
+            const dist = Math.sqrt(Math.pow(playerCenterX - fire.x, 2) + Math.pow(playerCenterY - fire.y, 2));
+
+            if (dist < maxRange) {
+                fire.health = 0;
+                fire.isCovered = true;
+                coveredFire = true;
+            }
+        });
+
+        // Check if all fires are extinguished
+        const allExtinguished = campsite.fires.every(fire => fire.health <= 0);
+        if (allExtinguished) {
+            campsite.fireExtinguished = true;
+        }
+    } else if (campsite.fire && campsite.fire.health > 0) {
+        // Handle single fire
+        const fire = campsite.fire;
+        const dist = Math.sqrt(
+            Math.pow(playerCenterX - fire.x, 2) +
+            Math.pow(playerCenterY - fire.y, 2)
+        );
+
+        if (dist < maxRange) {
+            fire.health = 0;
+            fire.isCovered = true;
+            campsite.fireExtinguished = true;
+            coveredFire = true;
+        }
+    }
+
+    if (coveredFire) {
+        playTarpSwish();
     }
 }
 
@@ -855,13 +1480,13 @@ function toggleFireSafeCheck() {
     // Must be at least (fireSize * 2) pixels away from trees and tent
     const minSafeDistance = fire.size * CONFIG.fire.safeDistanceMultiplier;
     const campsite = gameState.currentCampsite;
-    let isSafe = !fire.isTooClose && !fire.isTooLarge;
+    let isLegal = !fire.isTooClose && !fire.isTooLarge;
     
     // Check trees
     for (let tree of campsite.trees) {
         const dist = Math.sqrt(Math.pow(fire.x - tree.x, 2) + Math.pow(fire.y - tree.y, 2));
         if (dist < minSafeDistance) {
-            isSafe = false;
+            isLegal = false;
             break;
         }
     }
@@ -869,10 +1494,10 @@ function toggleFireSafeCheck() {
     // Check tent
     const tentDist = Math.sqrt(Math.pow(fire.x - campsite.tent.x, 2) + Math.pow(fire.y - campsite.tent.y, 2));
     if (tentDist < minSafeDistance) {
-        isSafe = false;
+        isLegal = false;
     }
     
-    gameState.checklist.fireSafe = isSafe;
+    gameState.checklist.fireSafe = isLegal;
     updateChecklistDisplay();
 }
 
@@ -901,7 +1526,7 @@ function updateChecklistDisplay() {
     }
 }
 
-function makeDecision(isSafe) {
+function makeDecision(isLegal) {
     if (!gameState.currentCampsite) return;
     
     const campsite = gameState.currentCampsite;
@@ -911,15 +1536,15 @@ function makeDecision(isSafe) {
     const actuallyValidLicense = campsite.license && campsite.license.hasLogo;
     const actuallyFireSafe = !campsite.fire.isTooClose && !campsite.fire.isTooLarge;
     const actuallyNeedToExtinguish = !actuallyHasLicense || !actuallyValidLicense || !actuallyFireSafe;
-    const actuallySafe = actuallyHasLicense && actuallyValidLicense && actuallyFireSafe;
+    const actuallyLegal = actuallyHasLicense && actuallyValidLicense && actuallyFireSafe;
     
     let correct = true;
     let message = '';
     
-    if (isSafe && !actuallySafe) {
+    if (isLegal && !actuallyLegal) {
         // Player said safe but it's not
         correct = false;
-        message = 'Incorrect! This campsite is UNSAFE.\n\n';
+        message = 'Incorrect! This campsite is ILLegal.\n\n';
         
         if (!actuallyHasLicense) {
             message += '❌ No license was present.\n';
@@ -938,21 +1563,21 @@ function makeDecision(isSafe) {
         if (actuallyNeedToExtinguish && campsite.fire.health > 0) {
             message += '❌ The illegal fire should have been extinguished.\n';
         }
-    } else if (!isSafe && actuallySafe) {
+    } else if (!isLegal && actuallyLegal) {
         // Player said unsafe but it's safe
         correct = false;
-        message = 'Incorrect! This campsite was SAFE.\n\n';
+        message = 'Incorrect! This campsite was Legal.\n\n';
         message += '✓ Valid license with campfire logo\n';
         message += '✓ Fire at safe distance from trees\n';
         message += '✓ Fire was appropriate size\n';
-    } else if (!isSafe && !actuallySafe) {
+    } else if (!isLegal && !actuallyLegal) {
         // Player correctly identified as unsafe
         if (actuallyNeedToExtinguish && campsite.fire.health > 0) {
             correct = false;
-            message = 'Almost! You correctly identified this as unsafe, but you needed to extinguish the illegal fire first!';
+            message = 'Almost! You correctly identified this as illegal, but you needed to extinguish the illegal fire first!';
         } else {
             correct = true;
-            message = 'Correct! This campsite was UNSAFE.\n\n';
+            message = 'Correct! This campsite was ILLegal.\n\n';
             
             if (!actuallyHasLicense) {
                 message += '✓ No license present\n';
@@ -975,7 +1600,7 @@ function makeDecision(isSafe) {
     } else {
         // Player correctly identified as safe
         correct = true;
-        message = 'Correct! This campsite was SAFE.\n\n';
+        message = 'Correct! This campsite was Legal.\n\n';
         message += '✓ Valid license with campfire logo\n';
         message += '✓ Fire at safe distance from trees\n';
         message += '✓ Fire was appropriate size\n';
@@ -992,17 +1617,24 @@ function makeDecision(isSafe) {
     
     // Always increment completed count and check for level ups
     gameState.campsitesCompleted++;
-    
+
     // Level up water gun
     if (gameState.campsitesCompleted % CONFIG.waterGun.levelUpThreshold === 0) {
         gameState.waterGunLevel++;
         message += `\n🎉 Water Gun upgraded to Level ${gameState.waterGunLevel}!`;
     }
-    
+
     // Increase difficulty
     if (gameState.campsitesCompleted % 5 === 0) {
         gameState.level++;
         message += `\n🏆 Advanced to Level ${gameState.level}!`;
+    }
+
+    // Show open burning fact every 5 campsites
+    if (gameState.campsitesCompleted % 5 === 0) {
+        const fact = openBurningFacts[gameState.factIndex % openBurningFacts.length];
+        message += `\n\n📚 Open Burning Fact:\n${fact.replace(/\./g, '.\n')}`;
+        gameState.factIndex++;
     }
     
     updateHUD();
@@ -1107,9 +1739,10 @@ function resetProgress() {
     gameState.campsitesCompleted = 0;
     gameState.currentCampsite = null;
     gameState.particles = [];
-    
+    gameState.factIndex = 0;
+
     localStorage.removeItem('pollutionRangerProgress');
-    
+
     updateHUD();
     generateCampsite();
 }
@@ -1143,14 +1776,44 @@ function checkNearInteractables() {
 // Main game loop
 function gameLoop() {
     ctx.clearRect(0, 0, CONFIG.canvas.width, CONFIG.canvas.height);
-    
+
     if (gameState.gamePhase === 'inspection') {
         handlePlayerMovement();
         updateCampers();
         drawCampsite();
         checkNearInteractables();
+
+        // Update wildfire timer
+        if (gameState.wildfireTimer !== null) {
+            gameState.wildfireTimer -= 1/60; // Assuming 60 FPS
+
+            if (gameState.wildfireTimer <= 0) {
+                // Time's up - game over
+                endGame(false, 'The wildfire spread out of control! Time ran out.');
+                return;
+            }
+
+            // Check if all fires are extinguished
+            if (gameState.currentCampsite && gameState.currentCampsite.fires) {
+                const allExtinguished = gameState.currentCampsite.fires.every(fire => fire.health <= 0);
+                if (allExtinguished) {
+                    // Wildfire contained successfully
+                    gameState.score++;
+                    gameState.campsitesCompleted++;
+                    gameState.wildfireTimer = null;
+                    resultTitle.textContent = '✓ Wildfire Contained!';
+                    resultTitle.style.color = '#4CAF50';
+                    resultText.textContent = 'You successfully put out all the fires!\n\nGreat job, Ranger!';
+                    resultMessage.classList.remove('hidden');
+                }
+            }
+        }
     }
-    
+
+    // Boundary checking to prevent walking on the sky
+    gameState.playerX = Math.max(0, Math.min(CONFIG.canvas.width - CONFIG.player.width, gameState.playerX));
+    gameState.playerY = Math.max(CONFIG.canvas.height * 0.4, Math.min(CONFIG.canvas.height - CONFIG.player.height, gameState.playerY));
+
     requestAnimationFrame(gameLoop);
 }
 

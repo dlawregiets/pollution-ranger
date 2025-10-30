@@ -10,10 +10,12 @@
     <div id="game-container">
         <canvas id="gameCanvas" width="800" height="600"></canvas>
         <div id="ui-overlay">
+            <div id="audio-toggle" style="position: absolute; bottom: 10px; left: 10px; cursor: pointer; font-size: 24px; color: white; text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8); pointer-events: auto;">🔊</div>
             <div id="hud">
                 <div id="level-info">Level: <span id="level-number">1</span></div>
                 <div id="water-gun-level">Water Gun Level: <span id="gun-level">1</span></div>
                 <div id="score">Campsites Checked: <span id="score-value">0</span></div>
+                <div id="bibliography-link" style="cursor: pointer; text-decoration: underline; pointer-events: auto;">Bibliography</div>
                 <div id="tutorial-hint" style="font-size: 12px; opacity: 0.7;">Press ? for help</div>
             </div>
             <div id="checklist">
@@ -28,8 +30,8 @@
                     <span class="checkbox">☐</span> Is the fire safe?
                 </div>
                 <div id="decision-buttons">
-                    <button id="mark-safe" class="decision-btn safe-btn">Safe</button>
-                    <button id="mark-unsafe" class="decision-btn unsafe-btn">Unsafe</button>
+                    <button id="mark-legal" class="decision-btn safe-btn">Legal</button>
+                    <button id="mark-illegal" class="decision-btn unsafe-btn">Illegal</button>
                 </div>
             </div>
             <div id="result-message" class="hidden">
@@ -65,8 +67,8 @@
                         <button id="inspect-license">Inspect License</button>
                         <button id="extinguish-fire">Extinguish Fire (Click to shoot)</button>
                         <button id="cover-fire">Cover with Tarp (X)</button>
-                        <button id="mark-legal">Mark as Legal</button>
-                        <button id="mark-illegal">Mark as Illegal</button>
+                        <button id="menu-mark-legal">Mark as Legal</button>
+                        <button id="menu-mark-illegal">Mark as Illegal</button>
                     </div>
                 </div>
             </div>
@@ -75,6 +77,24 @@
                     <h2 id="game-over-title">Game Over</h2>
                     <p id="game-over-message"></p>
                     <button id="restart-game">Restart Game</button>
+                </div>
+            </div>
+            <div id="bibliography" class="hidden" style="cursor: pointer;">
+                <div class="tutorial-content" style="max-width: 700px; max-height: 500px; overflow-y: auto;">
+                    <h2>Bibliography</h2>
+                    <div id="bibliography-text" style="text-align: left; font-size: 14px; line-height: 1.6;">
+                        <p style="text-indent: -2em; padding-left: 2em;">Burn Prevention Network. "Burn Bans: Why They Matter Now More than Ever." <em>Burn Prevention Network</em>, 2024,<br>www.burnprevention.org/general/burn-bans-why-they-matter-now-more-than-ever/. Accessed 13 Oct. 2025.</p>
+                        <p style="text-indent: -2em; padding-left: 2em;">"Health Risks and Environmental Impacts." <em>Open Burning</em>, 22 Feb. 2021,<br>www.in.gov/idem/openburning/health-risks-and-environmental-impacts/. Accessed 13 Oct. 2025.</p>
+                        <p style="text-indent: -2em; padding-left: 2em;">"Homepage - Air Quality Portal." <em>Air Quality</em>,<br>airquality.climate.ncsu.edu/. Accessed 13 Oct. 2025.</p>
+                        <p style="text-indent: -2em; padding-left: 2em;">Jackson, Philip. "Burn Ban Issued for All North Carolina Counties due to Hazardous Forest Fire Conditions." <em>Ncagr.gov</em>, 2025,<br>www.ncagr.gov/news/press-releases/2025/03/20/burn-ban-issued-all-north-carolina-counties-due-hazardous-forest-fire-conditions. Accessed 13 Oct. 2025.</p>
+                        <p style="text-indent: -2em; padding-left: 2em;">Moore, Andrew. "How Wildfires Impact Wildlife." <em>College of Natural Resources News</em>, 1 Sept. 2023,<br>cnr.ncsu.edu/news/2023/09/how-wildfires-impact-wildlife/. Accessed 13 Oct. 2025.</p>
+                        <p style="text-indent: -2em; padding-left: 2em;">"Open Burning | NC DEQ." <em>NC DEQ</em>,<br>www.deq.nc.gov/about/divisions/air-quality/air-quality-compliance/open-burning. Accessed 13 Oct. 2025.</p>
+                        <p style="text-indent: -2em; padding-left: 2em;">"Open Burning Permit Requirement Reinstated for 21 Counties in Western North Carolina as Accessibility Improves." <em>Ncagr.gov</em>, 2024,<br>www.ncagr.gov/news/press-releases/2024/12/17/open-burning-permit-requirement-reinstated-21-counties-western-north-carolina-accessibility-improves. Accessed 13 Oct. 2025.</p>
+                        <p style="text-indent: -2em; padding-left: 2em;">"State AQI | AirNow.gov." <em>AirNow.gov</em>,<br>www.airnow.gov/state/?name=north-carolina. Accessed 13 Oct. 2025.</p>
+                        <p style="text-indent: -2em; padding-left: 2em;">US EPA, OAR, OAQPS. "Air Quality Planning & Standards | Air & Radiation | US EPA." <em>EPA</em>, 2019,<br>www3.epa.gov/airquality/. Accessed 13 Oct. 2025.</p>
+                        <p style="text-indent: -2em; padding-left: 2em;">Wisconsin Department of Natural Resources. "Environmental and Health Impacts of Open Burning | Wisconsin DNR." <em>Wisconsin Department of Natural Resources</em>, 2020,<br>dnr.wisconsin.gov/topic/OpenBurning/Impacts.html. Accessed 13 Oct. 2025.</p>
+                    </div>
+                    <button id="bibliography-close">Close</button>
                 </div>
             </div>
         </div>
