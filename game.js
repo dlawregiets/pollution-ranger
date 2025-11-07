@@ -750,8 +750,8 @@ function stopAmbientMusic() {
 
 // Campsite generation
 function generateCampsite() {
-    const isLegal = Math.random() < 0.375; // 3/8 chance of legal (3:5 ratio)
     const isWildfire = gameState.level > 3 && Math.random() < 0.1; // 10% chance after level 3
+    const isLegal = (Math.random() < 0.375) && !isWildfire; // 3/8 chance of legal, but never for wildfires
     
     const campsite = {
         isLegal: isLegal,
@@ -1544,7 +1544,7 @@ function makeDecision(isLegal) {
     if (isLegal && !actuallyLegal) {
         // Player said safe but it's not
         correct = false;
-        message = 'Incorrect! This campsite is ILLegal.\n\n';
+        message = 'Incorrect! This campsite is Illegal.\n\n';
         
         if (!actuallyHasLicense) {
             message += '❌ No license was present.\n';
@@ -1577,7 +1577,7 @@ function makeDecision(isLegal) {
             message = 'Almost! You correctly identified this as illegal, but you needed to extinguish the illegal fire first!';
         } else {
             correct = true;
-            message = 'Correct! This campsite was ILLegal.\n\n';
+            message = 'Correct! This campsite was Illegal.\n\n';
             
             if (!actuallyHasLicense) {
                 message += '✓ No license present\n';
@@ -1633,7 +1633,7 @@ function makeDecision(isLegal) {
     // Show open burning fact every 5 campsites
     if (gameState.campsitesCompleted % 5 === 0) {
         const fact = openBurningFacts[gameState.factIndex % openBurningFacts.length];
-        message += `\n\n📚 Open Burning Fact:\n${fact.replace(/\./g, '.\n')}`;
+        message += `\n\n📚 Open Burning Fact:\n${fact}`;
         gameState.factIndex++;
     }
     
@@ -1805,6 +1805,8 @@ function gameLoop() {
                     resultTitle.style.color = '#4CAF50';
                     resultText.textContent = 'You successfully put out all the fires!\n\nGreat job, Ranger!';
                     resultMessage.classList.remove('hidden');
+                    // Hide decision menu since wildfire is automatically illegal
+                    campsiteMenu.classList.add('hidden');
                 }
             }
         }
