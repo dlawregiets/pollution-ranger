@@ -122,7 +122,7 @@ const tutorialSteps = [
     },
     {
         title: "Audio Settings",
-        text: "You can enable or disable audio in this game:\n• Click the speaker icon in the bottom left corner\n• Audio is currently enabled by default\n• Toggle it anytime during gameplay\n• For the best experience, use headphones to enjoy the immersive forest sounds!"
+        text: "You can enable or disable audio in this game:\n• Click the speaker icon in the bottom left corner\n• Audio is currently enabled by default\n• Toggle it anytime during gameplay"
     },
     {
         title: "Resetting Progress",
@@ -138,18 +138,23 @@ const tutorialSteps = [
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-// Audio context
+// Audio context and background music
 let audioContext;
-let ambientMusic;
-let isAmbientPlaying = false;
+let backgroundMusic;
 
 function initAudio() {
     try {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        backgroundMusic = document.getElementById('background-music');
+
         // Resume audio context on first user interaction
         const resumeAudio = () => {
             if (audioContext.state === 'suspended') {
                 audioContext.resume();
+            }
+            // Start background music if enabled
+            if (gameState.audioEnabled && backgroundMusic) {
+                backgroundMusic.play().catch(e => console.warn('Could not play background music:', e));
             }
             document.removeEventListener('click', resumeAudio);
             document.removeEventListener('keydown', resumeAudio);
@@ -200,9 +205,6 @@ function init() {
         // Start game directly
         gameState.gamePhase = 'travel';
         generateCampsite();
-        if (gameState.audioEnabled) {
-            startAmbientMusic();
-        }
     }
 
     updateHUD();
@@ -373,10 +375,13 @@ function toggleAudio() {
     gameState.audioEnabled = !gameState.audioEnabled;
     updateAudioIcon();
 
-    if (gameState.audioEnabled) {
-        startAmbientMusic();
-    } else {
-        stopAmbientMusic();
+    // Control background music
+    if (backgroundMusic) {
+        if (gameState.audioEnabled) {
+            backgroundMusic.play().catch(e => console.warn('Could not play background music:', e));
+        } else {
+            backgroundMusic.pause();
+        }
     }
 }
 
@@ -558,195 +563,10 @@ function playFireSound() {
     }
 }
 
-function startAmbientMusic() {
-    if (!audioContext || !gameState.audioEnabled || audioContext.state !== 'running' || isAmbientPlaying) return;
 
-    try {
-        // Create simple forest ambient sound using oscillators
-        const windOsc = audioContext.createOscillator();
-        const rustleOsc = audioContext.createOscillator();
-        const windGain = audioContext.createGain();
-        const rustleGain = audioContext.createGain();
-        const masterGain = audioContext.createGain();
-        const windFilter = audioContext.createBiquadFilter();
 
-        // Wind sound - low frequency oscillator with noise modulation
-        windOsc.frequency.setValueAtTime(45, audioContext.currentTime);
-        windOsc.type = 'sine';
 
-        // Rustling leaves - higher frequency with slow modulation
-        rustleOsc.frequency.setValueAtTime(180, audioContext.currentTime);
-        rustleOsc.type = 'triangle';
 
-        // Connect wind
-        windOsc.connect(windFilter);
-        windFilter.connect(windGain);
-        windGain.connect(masterGain);
-
-        // Connect rustle
-        rustleOsc.connect(rustleGain);
-        rustleGain.connect(masterGain);
-
-        masterGain.connect(audioContext.destination);
-
-        // Filter settings
-        windFilter.type = 'lowpass';
-        windFilter.frequency.setValueAtTime(200, audioContext.currentTime);
-
-        // Gain settings - fade in
-        windGain.gain.setValueAtTime(0, audioContext.currentTime);
-        windGain.gain.linearRampToValueAtTime(0.04, audioContext.currentTime + 2);
-
-        rustleGain.gain.setValueAtTime(0, audioContext.currentTime);
-        rustleGain.gain.linearRampToValueAtTime(0.02, audioContext.currentTime + 2);
-
-        masterGain.gain.setValueAtTime(0, audioContext.currentTime);
-        masterGain.gain.linearRampToValueAtTime(1, audioContext.currentTime + 2);
-
-        windOsc.start(audioContext.currentTime);
-        rustleOsc.start(audioContext.currentTime);
-
-        ambientMusic = { windOsc, rustleOsc, masterGain };
-        isAmbientPlaying = true;
-    } catch (e) {
-        console.warn('Error starting ambient music:', e);
-    }
-}
-
-function playBirdChirp() {
-    if (!gameState.audioEnabled || !audioContext || audioContext.state !== 'running') return;
-
-    try {
-        // Create a very subtle, natural bird chirp
-        const chirpDuration = 0.2 + Math.random() * 0.3; // 200-500ms
-        const bufferSize = audioContext.sampleRate * chirpDuration;
-        const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
-        const data = buffer.getChannelData(0);
-
-        // Generate very gentle chirp
-        for (let i = 0; i < bufferSize; i++) {
-            const t = i / bufferSize;
-            const freq = 1800 + t * 800; // Gentle rising frequency
-            const chirp = Math.sin(2 * Math.PI * freq * t) * Math.exp(-t * 3) * 0.0005; // Extremely quiet
-            data[i] = chirp;
-        }
-
-        const source = audioContext.createBufferSource();
-        const gainNode = audioContext.createGain();
-        const filter = audioContext.createBiquadFilter();
-
-        source.buffer = buffer;
-        source.connect(filter);
-        filter.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-
-        filter.type = 'highpass';
-        filter.frequency.setValueAtTime(1500, audioContext.currentTime); // Filter out low frequencies
-
-        gainNode.gain.setValueAtTime(0.001, audioContext.currentTime); // Louder
-
-        source.start(audioContext.currentTime);
-    } catch (e) {
-        console.warn('Error playing bird chirp:', e);
-    }
-}
-
-function playCricketChirp() {
-    if (!gameState.audioEnabled || !audioContext || audioContext.state !== 'running') return;
-
-    try {
-        // Create cricket chirping sound
-        const chirpDuration = 0.8 + Math.random() * 0.4; // 800-1200ms
-        const bufferSize = audioContext.sampleRate * chirpDuration;
-        const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
-        const data = buffer.getChannelData(0);
-
-        // Generate cricket-like chirps with multiple pulses
-        for (let i = 0; i < bufferSize; i++) {
-            const t = i / bufferSize;
-            let chirp = 0;
-
-            // Multiple chirp pulses
-            for (let pulse = 0; pulse < 3; pulse++) {
-                const pulseTime = pulse * 0.3;
-                const pulseT = Math.max(0, t - pulseTime);
-                if (pulseT < 0.1) {
-                    const freq = 3000 + Math.sin(pulseT * Math.PI * 20) * 500;
-                    chirp += Math.sin(2 * Math.PI * freq * pulseT) * Math.exp(-pulseT * 15) * 0.0002;
-                }
-            }
-
-            data[i] = chirp;
-        }
-
-        const source = audioContext.createBufferSource();
-        const gainNode = audioContext.createGain();
-
-        source.buffer = buffer;
-        source.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-
-        gainNode.gain.setValueAtTime(0.0012, audioContext.currentTime); // Louder
-
-        source.start(audioContext.currentTime);
-    } catch (e) {
-        console.warn('Error playing cricket chirp:', e);
-    }
-}
-
-function playFrogCroak() {
-    if (!gameState.audioEnabled || !audioContext || audioContext.state !== 'running') return;
-
-    try {
-        // Create frog croaking sound
-        const croakDuration = 0.6 + Math.random() * 0.4; // 600-1000ms
-        const bufferSize = audioContext.sampleRate * croakDuration;
-        const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
-        const data = buffer.getChannelData(0);
-
-        // Generate frog-like croak with descending frequency
-        for (let i = 0; i < bufferSize; i++) {
-            const t = i / bufferSize;
-            const freq = 400 - t * 200; // Descending frequency
-            const croak = Math.sin(2 * Math.PI * freq * t) * Math.sin(2 * Math.PI * 2 * t) * Math.exp(-t * 2) * 0.0003;
-            data[i] = croak;
-        }
-
-        const source = audioContext.createBufferSource();
-        const gainNode = audioContext.createGain();
-
-        source.buffer = buffer;
-        source.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-
-        gainNode.gain.setValueAtTime(0.001, audioContext.currentTime); // Louder
-
-        source.start(audioContext.currentTime);
-    } catch (e) {
-        console.warn('Error playing frog croak:', e);
-    }
-}
-
-function stopAmbientMusic() {
-    if (ambientMusic && isAmbientPlaying) {
-        try {
-            ambientMusic.masterGain.gain.setValueAtTime(ambientMusic.masterGain.gain.value, audioContext.currentTime);
-            ambientMusic.masterGain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 1);
-
-            setTimeout(() => {
-                if (ambientMusic) {
-                    ambientMusic.windOsc.stop();
-                    ambientMusic.rustleOsc.stop();
-                    ambientMusic = null;
-                }
-            }, 1000);
-        } catch (e) {
-            console.warn('Error stopping ambient music:', e);
-        }
-
-        isAmbientPlaying = false;
-    }
-}
 
 // Campsite generation
 function generateCampsite() {
