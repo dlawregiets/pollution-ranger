@@ -7,3 +7,4 @@ with some refinement help by me.
 
 Generated mostly with Grok Code Fast 1 via OpenRouter and VS Code.
 
+[Pollution Ranger](https://pollution-ranger.pages.dev/) game.
